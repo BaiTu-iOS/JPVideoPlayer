@@ -74,9 +74,12 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
 
         NSString *indexStr = [NSString stringWithContentsOfFile:self.indexFilePath encoding:NSUTF8StringEncoding error:nil];
         NSData *data = [indexStr dataUsingEncoding:NSUTF8StringEncoding];
-        NSDictionary *indexDictionary = [NSJSONSerialization JSONObjectWithData:data
-                                                                 options:NSJSONReadingMutableContainers | NSJSONReadingAllowFragments
-                                                                   error:nil];
+        NSDictionary *indexDictionary = [NSDictionary dictionary];
+        if (data) {
+            indexDictionary = [NSJSONSerialization JSONObjectWithData:data
+                                                                     options:NSJSONReadingMutableContainers | NSJSONReadingAllowFragments
+                                                                       error:nil];
+        }
         if (![self serializeIndex:indexDictionary]) {
             [self truncateFileWithFileLength:0];
         }
