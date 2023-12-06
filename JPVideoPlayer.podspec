@@ -1,16 +1,16 @@
 Pod::Spec.new do |s|
   s.name             = 'JPVideoPlayer'
-  s.version          = '3.1.1'
+  s.version          = '3.1.1.BAITU'
   s.summary          = 'JPVideoPlayer.'
 
   s.description      = <<-DESC
   fork JPVideoPlayer.
                        DESC
 
-  s.homepage         = 'http://gitlab.v.show/ios_framework/JPVideoPlayer.git'
+  s.homepage         = 'https://github.com/BaiTu-iOS/JPVideoPlayer.git'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
   s.author           = { 'tianming' => '206678264@qq.com' }
-  s.source           = { :git => 'http://gitlab.v.show/ios_framework/JPVideoPlayer.git', :tag => s.version.to_s }
+  s.source           = { :git => 'https://github.com/BaiTu-iOS/JPVideoPlayer.git', :tag => s.version.to_s }
 
   s.ios.deployment_target = '11.4'
   s.static_framework = true
