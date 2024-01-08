@@ -198,12 +198,26 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
     }
 
     int lock = pthread_mutex_trylock(&_lock);
-    for (int i = 0; i < self.internalFragmentRanges.count; ++i) {
-        NSRange range = [self.internalFragmentRanges[i] rangeValue];
+    
+    NSArray *tempRanges = [self.internalFragmentRanges copy];
+    for (int i = 0; i < tempRanges.count; ++i) {
+        NSRange range = [tempRanges[i] rangeValue];
         if (NSLocationInRange(position, range)) {
-            return range;
+            if (i < self.internalFragmentRanges.count) {
+                return range;
+            } else {
+                return JPInvalidRange;
+            }
         }
     }
+    
+//    for (int i = 0; i < self.internalFragmentRanges.count; ++i) {
+//        NSRange range = [self.internalFragmentRanges[i] rangeValue];
+//        if (NSLocationInRange(position, range)) {
+//            return range;
+//        }
+//    }
+    
     if (!lock) {
         pthread_mutex_unlock(&_lock);
     }
