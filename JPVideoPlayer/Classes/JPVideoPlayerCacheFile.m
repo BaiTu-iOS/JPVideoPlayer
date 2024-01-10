@@ -13,6 +13,7 @@
 #import "JPVideoPlayerCompat.h"
 #import "JPVideoPlayerSupportUtils.h"
 #import "JPVideoPlayerCompat.h"
+#import "JPVideoPlayerCache.h"
 #import <pthread.h>
 
 @interface JPVideoPlayerCacheFile()
@@ -463,12 +464,48 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
     NSString *indexString = [self unserializeIndex];
     int lock = pthread_mutex_trylock(&_lock);
     JPDebugLog(@"Did synchronize index file");
-    [self.writeFileHandle synchronizeFile];
-    BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
+    
+    BOOL haveSize = [[JPVideoPlayerCache sharedCache] haveFreeSizeToCacheFileWithSize:self.fileLength];
+    
+    // 如果有足够的空间缓存这次数据
+    if (haveSize) {
+        [self.writeFileHandle synchronizeFile];
+        BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+        if (!lock) {
+            pthread_mutex_unlock(&_lock);
+        }
+        return synchronize;
+    } else {
+        
+#ifdef DEBUG
+        [[JPVideoPlayerCache sharedCache] calculateSizeOnCompletion:^(NSUInteger fileCount, NSUInteger totalSize) {
+            NSLog(@"JPVideoPlayer当前缓存数量和大小: %ld, %ld", fileCount, totalSize);
+        }];
+#else
+#endif
+        
+        // 清除设置的最大缓存2/3的缓存
+        [[JPVideoPlayerCache sharedCache] clearHalfOfOurMaximumCache];
+        
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"kJPVideoPlayerCacheDiskMemoryNoSpace" object:nil];
+        
+        if (!lock) {
+            pthread_mutex_unlock(&_lock);
+        }
+        
+        return NO;
     }
-    return synchronize;
+    
+    
+//    NSString *indexString = [self unserializeIndex];
+//    int lock = pthread_mutex_trylock(&_lock);
+//    JPDebugLog(@"Did synchronize index file");
+//    [self.writeFileHandle synchronizeFile];
+//    BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+//    return synchronize;
 }
 
 @end

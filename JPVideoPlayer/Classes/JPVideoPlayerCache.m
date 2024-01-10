@@ -21,7 +21,7 @@
 #import <pthread.h>
 
 static const NSInteger kDefaultCacheMaxCacheAge = 60*60*24*7; // 1 week
-static const NSInteger kDefaultCacheMaxSize = 1000*1000*1000; // 1 GB
+static const NSInteger kDefaultCacheMaxSize = 1000*1000*800; // 800M
 
 @implementation JPVideoPlayerCacheConfiguration
 
@@ -90,6 +90,74 @@ static NSString *kJPVideoPlayerVersion2CacheHasBeenClearedKey = @"com.newpan.ver
         instance = [[self alloc] initWithCacheConfiguration:nil];
     });
     return instance;
+}
+
+//MARK: 清除设置的最大缓存一半的缓存
+- (void)clearHalfOfOurMaximumCache {
+    
+    dispatch_async(self.ioQueue, ^{
+        NSURL *diskCacheURL = [NSURL fileURLWithPath:[JPVideoPlayerCachePath videoCachePath] isDirectory:YES];
+        NSArray<NSString *> *resourceKeys = @[NSURLIsDirectoryKey, NSURLContentModificationDateKey, NSURLTotalFileAllocatedSizeKey];
+        
+        // This enumerator prefetches useful properties for our cache files.
+        NSDirectoryEnumerator *fileEnumerator = [self.fileManager enumeratorAtURL:diskCacheURL
+                                                   includingPropertiesForKeys:resourceKeys
+                                                                      options:NSDirectoryEnumerationSkipsHiddenFiles
+                                                                 errorHandler:NULL];
+        
+        NSMutableDictionary<NSURL *, NSDictionary<NSString *, id> *> *cacheFiles = [NSMutableDictionary dictionary];
+        NSUInteger currentCacheSize = 0;
+        
+        // Enumerate all of the files in the cache directory.  This loop has two purposes:
+        //
+        //  1. Removing files that are older than the expiration date.
+        //  2. Storing file attributes for the size-based cleanup pass.
+        NSMutableArray<NSURL *> *urlsToDelete = [[NSMutableArray alloc] init];
+        
+        @autoreleasepool {
+            for (NSURL *fileURL in fileEnumerator) {
+                NSError *error;
+                NSDictionary<NSString *, id> *resourceValues = [fileURL resourceValuesForKeys:resourceKeys error:&error];
+                
+                // Skip directories and errors.
+                if (error || !resourceValues || [resourceValues[NSURLIsDirectoryKey] boolValue]) {
+                    continue;
+                }
+                
+                // Store a reference to this file and account for its total size.
+                NSNumber *totalAllocatedSize = resourceValues[NSURLTotalFileAllocatedSizeKey];
+                currentCacheSize += totalAllocatedSize.unsignedIntegerValue;
+                cacheFiles[fileURL] = resourceValues;
+            }
+        }
+        
+        // If our remaining disk cache exceeds a configured maximum size, perform a second
+        // size-based cleanup pass.  We delete the oldest files first.
+        if (self.cacheConfiguration.maxCacheSize > 0) {
+            // Target half of our maximum cache size for this cleanup pass.
+            // 清除三分之二的缓存
+            const NSUInteger desiredCacheSize = self.cacheConfiguration.maxCacheSize * (2.0 / 3.0);
+            
+            // Sort the remaining cache files by their last modification time (oldest first).
+            NSArray<NSURL *> *sortedFiles = [cacheFiles keysSortedByValueWithOptions:NSSortConcurrent
+                                                                     usingComparator:^NSComparisonResult(id obj1, id obj2) {
+                                                                         return [obj1[NSURLContentModificationDateKey] compare:obj2[NSURLContentModificationDateKey]];
+                                                                     }];
+            
+            // Delete files until we fall below our desired cache size.
+            for (NSURL *fileURL in sortedFiles) {
+                if ([self.fileManager removeItemAtURL:fileURL error:nil]) {
+                    NSDictionary<NSString *, id> *resourceValues = cacheFiles[fileURL];
+                    NSNumber *totalAllocatedSize = resourceValues[NSURLTotalFileAllocatedSizeKey];
+                    currentCacheSize -= totalAllocatedSize.unsignedIntegerValue;
+                    
+                    if (currentCacheSize < desiredCacheSize) {
+                        break;
+                    }
+                }
+            }
+        }
+    });
 }
 
 

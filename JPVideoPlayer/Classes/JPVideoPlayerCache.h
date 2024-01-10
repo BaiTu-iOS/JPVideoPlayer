@@ -85,6 +85,10 @@ typedef void(^JPVideoPlayerCalculateSizeCompletion)(NSUInteger fileCount, NSUInt
  */
 + (instancetype)sharedCache;
 
+
+/// 清除设置的最大缓存一半的缓存, 这里目前是清除2/3的缓存
+- (void)clearHalfOfOurMaximumCache;
+
 # pragma mark - Query and Retrieve Options
 /**
  * Async check if video exists in disk cache already (does not load the video).
