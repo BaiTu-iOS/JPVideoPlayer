@@ -132,25 +132,28 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
 - (void)mergeRangesIfNeed {
     JPMainThreadAssert;
     BOOL isMerge = NO;
-    for (int i = 0; i < self.internalFragmentRanges.count; ++i) {
-        if ((i + 1) < self.internalFragmentRanges.count) {
-            NSRange currentRange = [self.internalFragmentRanges[i] rangeValue];
-            NSRange nextRange = [self.internalFragmentRanges[i + 1] rangeValue];
-            if (JPRangeCanMerge(currentRange, nextRange)) {
-                [self.internalFragmentRanges removeObjectsAtIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(i, 2)]];
-                [self.internalFragmentRanges insertObject:[NSValue valueWithRange:NSUnionRange(currentRange, nextRange)] atIndex:i];
-                i -= 1;
-                isMerge = YES;
+    
+    @synchronized (self.internalFragmentRanges) {
+        for (int i = 0; i < self.internalFragmentRanges.count; ++i) {
+            if ((i + 1) < self.internalFragmentRanges.count) {
+                NSRange currentRange = [self.internalFragmentRanges[i] rangeValue];
+                NSRange nextRange = [self.internalFragmentRanges[i + 1] rangeValue];
+                if (JPRangeCanMerge(currentRange, nextRange)) {
+                    [self.internalFragmentRanges removeObjectsAtIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(i, 2)]];
+                    [self.internalFragmentRanges insertObject:[NSValue valueWithRange:NSUnionRange(currentRange, nextRange)] atIndex:i];
+                    i -= 1;
+                    isMerge = YES;
+                }
             }
         }
-    }
-    if(isMerge){
-       NSString *string = @"";
-       for(NSValue *rangeValue in self.internalFragmentRanges){
-           NSRange range = [rangeValue rangeValue];
-           string = [string stringByAppendingString:[NSString stringWithFormat:@"%@; ", NSStringFromRange(range)]];
-       }
-        /// JPDebugLog(@"合并后已缓存区间: %@", string);
+        if(isMerge){
+           NSString *string = @"";
+           for(NSValue *rangeValue in self.internalFragmentRanges){
+               NSRange range = [rangeValue rangeValue];
+               string = [string stringByAppendingString:[NSString stringWithFormat:@"%@; ", NSStringFromRange(range)]];
+           }
+            /// JPDebugLog(@"合并后已缓存区间: %@", string);
+        }
     }
 }
 
@@ -325,6 +328,7 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
               atOffset:(NSUInteger)offset
            synchronize:(BOOL)synchronize
       storedCompletion:(dispatch_block_t)completion {
+    NSLog(@"writeFileHandle ==== %@", self.writeFileHandle);
     NSParameterAssert(self.writeFileHandle);
     @try {
         [self.writeFileHandle seekToFileOffset:offset];
@@ -469,12 +473,32 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
     
     // 如果有足够的空间缓存这次数据
     if (haveSize) {
-        [self.writeFileHandle synchronizeFile];
-        BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
-        if (!lock) {
-            pthread_mutex_unlock(&_lock);
+        if (@available(iOS 13.0, *)) {
+            
+            NSError *synchronizeErr;
+            [self.writeFileHandle synchronizeAndReturnError:&synchronizeErr];
+            NSLog(@"synchronizeErr === %@", synchronizeErr);
+//            if (!synchronizeErr) {
+                BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+                if (!lock) {
+                    pthread_mutex_unlock(&_lock);
+                }
+                return synchronize;
+//            } 
+//            else {
+//                if (!lock) {
+//                    pthread_mutex_unlock(&_lock);
+//                }
+//                return NO;
+//            }
+        } else {
+            [self.writeFileHandle synchronizeFile];
+            BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+            if (!lock) {
+                pthread_mutex_unlock(&_lock);
+            }
+            return synchronize;
         }
-        return synchronize;
     } else {
         
 #ifdef DEBUG
