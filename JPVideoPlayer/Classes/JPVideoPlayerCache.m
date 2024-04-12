@@ -383,7 +383,8 @@ static NSString *kJPVideoPlayerVersion2CacheHasBeenClearedKey = @"com.newpan.ver
 
 - (BOOL)haveFreeSizeToCacheFileWithSize:(NSUInteger)fileSize{
     unsigned long long freeSizeOfDevice = [self getDiskFreeSize];
-    if (fileSize > freeSizeOfDevice) {
+    /// 如果剩余空间大于150M 定为有剩余空间, 预留出150M
+    if (fileSize > (freeSizeOfDevice + 157286400)) {
         return NO;
     }
     return YES;

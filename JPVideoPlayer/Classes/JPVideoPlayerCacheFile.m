@@ -328,7 +328,7 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
               atOffset:(NSUInteger)offset
            synchronize:(BOOL)synchronize
       storedCompletion:(dispatch_block_t)completion {
-    NSLog(@"writeFileHandle ==== %@", self.writeFileHandle);
+//    NSLog(@"writeFileHandle ==== %@", self.writeFileHandle);
     NSParameterAssert(self.writeFileHandle);
     @try {
         [self.writeFileHandle seekToFileOffset:offset];
@@ -477,20 +477,12 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
             
             NSError *synchronizeErr;
             [self.writeFileHandle synchronizeAndReturnError:&synchronizeErr];
-            NSLog(@"synchronizeErr === %@", synchronizeErr);
-//            if (!synchronizeErr) {
-                BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
-                if (!lock) {
-                    pthread_mutex_unlock(&_lock);
-                }
-                return synchronize;
-//            } 
-//            else {
-//                if (!lock) {
-//                    pthread_mutex_unlock(&_lock);
-//                }
-//                return NO;
-//            }
+//            NSLog(@"synchronizeErr === %@", synchronizeErr);
+            BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
+            if (!lock) {
+                pthread_mutex_unlock(&_lock);
+            }
+            return synchronize;
         } else {
             [self.writeFileHandle synchronizeFile];
             BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
