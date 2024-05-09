@@ -16,6 +16,8 @@
 #import "JPVideoPlayerCache.h"
 #import <pthread.h>
 
+static NSRecursiveLock *SDK_LOCK = nil;
+
 @interface JPVideoPlayerCacheFile()
 
 @property (nonatomic, strong) NSMutableArray<NSValue *> *internalFragmentRanges;
@@ -32,7 +34,7 @@
 
 @property (nonatomic, copy) NSDictionary *responseHeaders;
 
-@property (nonatomic) pthread_mutex_t lock;
+//@property (nonatomic) pthread_mutex_t lock;
 
 @end
 
@@ -63,6 +65,9 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
 
     self = [super init];
     if (self) {
+        
+        SDK_LOCK = [[NSRecursiveLock alloc] init];
+        
         _cacheFilePath = filePath;
         _indexFilePath = indexFilePath;
         _internalFragmentRanges = [[NSMutableArray alloc] init];
@@ -71,7 +76,7 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         pthread_mutexattr_t mutexattr;
         pthread_mutexattr_init(&mutexattr);
         pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_RECURSIVE);
-        pthread_mutex_init(&_lock, &mutexattr);
+//        pthread_mutex_init(&_lock, &mutexattr);
 
         NSString *indexStr = [NSString stringWithContentsOfFile:self.indexFilePath encoding:NSUTF8StringEncoding error:nil];
         NSData *data = [indexStr dataUsingEncoding:NSUTF8StringEncoding];
@@ -93,9 +98,17 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
 - (void)dealloc {
     [self.readFileHandle closeFile];
     [self.writeFileHandle closeFile];
-    pthread_mutex_destroy(&_lock);
+//    pthread_mutex_destroy(&_lock);
 }
 
+- (void)lockSDK {
+    [SDK_LOCK lock];
+}
+
+
+- (void)unlockSDK {
+    [SDK_LOCK unlock];
+}
 
 #pragma mark - Properties
 
@@ -201,9 +214,11 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         return JPInvalidRange;
     }
 
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
     
-    NSArray *tempRanges = [self.internalFragmentRanges copy];
+    [self lockSDK];
+    
+    NSMutableArray *tempRanges = [self.internalFragmentRanges mutableCopy];
     for (int i = 0; i < tempRanges.count; ++i) {
         NSRange range = [tempRanges[i] rangeValue];
         if (NSLocationInRange(position, range)) {
@@ -222,9 +237,11 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
 //        }
 //    }
     
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    
+    [self unlockSDK];
     return JPInvalidRange;
 }
 
@@ -233,7 +250,10 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         return JPInvalidRange;
     }
 
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    
+    [self lockSDK];
+    
     NSRange targetRange = JPInvalidRange;
     NSUInteger start = position;
     for (int i = 0; i < self.internalFragmentRanges.count; ++i) {
@@ -254,14 +274,21 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
     if (start < self.fileLength) {
         targetRange = NSMakeRange(start, self.fileLength - start);
     }
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+    
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    
+    [self unlockSDK];
+    
     return targetRange;
 }
 
 - (void)checkIsCompleted {
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    
+    [self lockSDK];
+    
     self.completed = NO;
     if (self.internalFragmentRanges && self.internalFragmentRanges.count == 1) {
         NSRange range = [self.internalFragmentRanges[0] rangeValue];
@@ -270,9 +297,11 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         }
     }
 
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    
+    [self unlockSDK];
 }
 
 
@@ -284,28 +313,41 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         return NO;
     }
 
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    
+    [self lockSDK];
+    
     self.fileLength = fileLength;
     @try {
         [self.writeFileHandle truncateFileAtOffset:self.fileLength * sizeof(Byte)];
         unsigned long long end = [self.writeFileHandle seekToEndOfFile];
         if (end != self.fileLength) {
-            if (!lock) {
-                pthread_mutex_unlock(&_lock);
-            }
+//            if (!lock) {
+//                pthread_mutex_unlock(&_lock);
+//            }
+            
+            [self unlockSDK];
+            
             return NO;
         }
     }
     @catch (NSException * e) {
         JPErrorLog(@"Truncate file raise a exception: %@", e);
-        if (!lock) {
-            pthread_mutex_unlock(&_lock);
-        }
+//        if (!lock) {
+//            pthread_mutex_unlock(&_lock);
+//        }
+        
+        [self unlockSDK];
+        
         return NO;
     }
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+    
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    
+    [self unlockSDK];
+    
     return YES;
 }
 
@@ -363,12 +405,18 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
 - (NSData *)readDataWithLength:(NSUInteger)length {
     NSRange range = [self cachedRangeForRange:NSMakeRange(self.readOffset, length)];
     if (JPValidFileRange(range)) {
-        int lock = pthread_mutex_trylock(&_lock);
+//        int lock = pthread_mutex_trylock(&_lock);
+        
+        [self lockSDK];
+        
         NSData *data = [self.readFileHandle readDataOfLength:range.length];
         self.readOffset += [data length];
-        if (!lock) {
-            pthread_mutex_unlock(&_lock);
-        }
+//        if (!lock) {
+//            pthread_mutex_unlock(&_lock);
+//        }
+        
+        [self unlockSDK];
+        
         return data;
     }
     return nil;
@@ -378,21 +426,28 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
 #pragma mark - seek
 
 - (void)seekToPosition:(NSUInteger)position {
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    
+    [self lockSDK];
+    
     [self.readFileHandle seekToFileOffset:position];
     self.readOffset = (NSUInteger)self.readFileHandle.offsetInFile;
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    
+    [self unlockSDK];
 }
 
 - (void)seekToEnd {
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    [self lockSDK];
     [self.readFileHandle seekToEndOfFile];
     self.readOffset = (NSUInteger)self.readFileHandle.offsetInFile;
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    [self unlockSDK];
 }
 
 
@@ -403,16 +458,20 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         return NO;
     }
 
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    
+    [self lockSDK];
+    
     NSNumber *fileSize = indexDictionary[kJPVideoPlayerCacheFileSizeKey];
     if (fileSize && [fileSize isKindOfClass:[NSNumber class]]) {
         self.fileLength = [fileSize unsignedIntegerValue];
     }
 
     if (self.fileLength == 0) {
-        if (!lock) {
-            pthread_mutex_unlock(&_lock);
-        }
+//        if (!lock) {
+//            pthread_mutex_unlock(&_lock);
+//        }
+        [self unlockSDK];
         return NO;
     }
 
@@ -423,14 +482,18 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         [self.internalFragmentRanges addObject:[NSValue valueWithRange:range]];
     }
     self.responseHeaders = indexDictionary[kJPVideoPlayerCacheFileResponseHeadersKey];
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    
+    [self unlockSDK];
     return YES;
 }
 
 - (NSString *)unserializeIndex {
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    
+    [self lockSDK];
 
     NSMutableDictionary *dict = [@{
             kJPVideoPlayerCacheFileSizeKey: @(self.fileLength),
@@ -453,20 +516,28 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
     NSData *data = [NSJSONSerialization dataWithJSONObject:dict options:0 error:nil];
     if (data) {
         NSString *dataString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        if (!lock) {
-            pthread_mutex_unlock(&_lock);
-        }
+//        if (!lock) {
+//            pthread_mutex_unlock(&_lock);
+//        }
+        
+        [self unlockSDK];
         return dataString;
     }
-    if (!lock) {
-        pthread_mutex_unlock(&_lock);
-    }
+//    if (!lock) {
+//        pthread_mutex_unlock(&_lock);
+//    }
+    
+    [self unlockSDK];
+    
     return nil;
 }
 
 - (BOOL)synchronize {
     NSString *indexString = [self unserializeIndex];
-    int lock = pthread_mutex_trylock(&_lock);
+//    int lock = pthread_mutex_trylock(&_lock);
+    
+    [self lockSDK];
+    
     JPDebugLog(@"Did synchronize index file");
     
     BOOL haveSize = [[JPVideoPlayerCache sharedCache] haveFreeSizeToCacheFileWithSize:self.fileLength];
@@ -479,16 +550,22 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
             [self.writeFileHandle synchronizeAndReturnError:&synchronizeErr];
 //            NSLog(@"synchronizeErr === %@", synchronizeErr);
             BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
-            if (!lock) {
-                pthread_mutex_unlock(&_lock);
-            }
+//            if (!lock) {
+//                pthread_mutex_unlock(&_lock);
+//            }
+            
+            [self unlockSDK];
+            
             return synchronize;
         } else {
             [self.writeFileHandle synchronizeFile];
             BOOL synchronize = [indexString writeToFile:self.indexFilePath atomically:YES encoding:NSUTF8StringEncoding error:NULL];
-            if (!lock) {
-                pthread_mutex_unlock(&_lock);
-            }
+//            if (!lock) {
+//                pthread_mutex_unlock(&_lock);
+//            }
+            
+            [self unlockSDK];
+            
             return synchronize;
         }
     } else {
@@ -505,9 +582,11 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
         
         [[NSNotificationCenter defaultCenter] postNotificationName:@"kJPVideoPlayerCacheDiskMemoryNoSpace" object:nil];
         
-        if (!lock) {
-            pthread_mutex_unlock(&_lock);
-        }
+//        if (!lock) {
+//            pthread_mutex_unlock(&_lock);
+//        }
+        
+        [self unlockSDK];
         
         return NO;
     }
