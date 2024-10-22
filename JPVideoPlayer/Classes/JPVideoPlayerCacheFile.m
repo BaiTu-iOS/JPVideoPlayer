@@ -220,12 +220,23 @@ static const NSString *kJPVideoPlayerCacheFileResponseHeadersKey = @"com.newpan.
     
     NSRange range = JPInvalidRange;
     
+//    NSMutableArray *tempRanges = [self.internalFragmentRanges mutableCopy];
+//    for (int i = 0; i < tempRanges.count; ++i) {
+//        NSRange rangeTemp = [tempRanges[i] rangeValue];
+//        if (NSLocationInRange(position, rangeTemp)) {
+//            range = rangeTemp;
+//            break;
+//        }
+//    }
+    
     NSMutableArray *tempRanges = [self.internalFragmentRanges mutableCopy];
     for (int i = 0; i < tempRanges.count; ++i) {
-        NSRange rangeTemp = [tempRanges[i] rangeValue];
-        if (NSLocationInRange(position, rangeTemp)) {
-            range = rangeTemp;
-            break;
+        if ([tempRanges[i] isKindOfClass:[NSValue class]]) {
+            NSRange rangeTemp = [tempRanges[i] rangeValue];
+            if (NSLocationInRange(position, rangeTemp)) {
+                range = rangeTemp;
+                break;
+            }
         }
     }
     
