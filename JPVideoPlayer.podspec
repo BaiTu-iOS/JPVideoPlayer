@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'JPVideoPlayer'
-  s.version          = '3.1.1.BAITU.b5'
+  s.version          = '3.1.1.BAITU.b6'
   s.summary          = 'JPVideoPlayer.'
 
   s.description      = <<-DESC
