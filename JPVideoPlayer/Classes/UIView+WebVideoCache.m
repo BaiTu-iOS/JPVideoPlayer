@@ -700,6 +700,10 @@
                                                          totalSeconds:totalSeconds
                                                              videoURL:self.jp_videoURL];
     }
+    
+    if (self.jp_videoPlayerDelegate && [self.jp_videoPlayerDelegate respondsToSelector:@selector(playerProgressDidChangeElapsedSeconds:totalSeconds:)]) {
+        [self.jp_videoPlayerDelegate playerProgressDidChangeElapsedSeconds:elapsedSeconds totalSeconds:totalSeconds];
+    }
 }
 
 - (BOOL)videoPlayerManager:(JPVideoPlayerManager *)videoPlayerManager

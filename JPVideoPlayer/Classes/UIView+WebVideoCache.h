@@ -80,6 +80,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (void)playerStatusDidChanged:(JPVideoPlayerStatus)playerStatus;
 
+- (void)playerProgressDidChangeElapsedSeconds:(double)elapsedSeconds
+                                   totalSeconds:(double)totalSeconds;
+
 /**
  * Called when application will resign active.
  *
